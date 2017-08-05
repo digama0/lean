@@ -149,14 +149,14 @@ iff.intro
 lemma lt_succ (a : ℤ) : a < a + 1 :=
 int.le_refl (a + 1)
 
-protected lemma add_le_add_left {a b : ℤ} (h : a ≤ b) (c : ℤ) : c + a ≤ c + b :=
+protected lemma add_le_add_left_of_le {a b : ℤ} (h : a ≤ b) (c : ℤ) : c + a ≤ c + b :=
 le.elim h (assume n, assume hn : a + n = b,
   le.intro (show c + a + n = c + b, begin rw [add_assoc, hn] end))
 
-protected lemma add_lt_add_left {a b : ℤ} (h : a < b) (c : ℤ) : c + a < c + b :=
+protected lemma add_lt_add_left_of_lt {a b : ℤ} (h : a < b) (c : ℤ) : c + a < c + b :=
 iff.mpr (int.lt_iff_le_and_ne _ _)
   (and.intro
-    (int.add_le_add_left (le_of_lt h) _)
+    (int.add_le_add_left_of_le (le_of_lt h) _)
     (assume heq, int.lt_irrefl b begin rw add_left_cancel heq at h, exact h end))
 
 protected lemma mul_nonneg {a b : ℤ} (ha : 0 ≤ a) (hb : 0 ≤ b) : 0 ≤ a * b :=
@@ -182,22 +182,22 @@ end
 
 instance : decidable_linear_ordered_comm_ring int :=
 { int.comm_ring with
-  le              := int.le,
-  le_refl         := int.le_refl,
-  le_trans        := @int.le_trans,
-  le_antisymm     := @int.le_antisymm,
-  lt              := int.lt,
-  lt_iff_le_not_le := @int.lt_iff_le_not_le,
-  add_le_add_left := @int.add_le_add_left,
-  add_lt_add_left := @int.add_lt_add_left,
-  zero_ne_one     := zero_ne_one,
-  mul_nonneg      := @int.mul_nonneg,
-  mul_pos         := @int.mul_pos,
-  le_total        := int.le_total,
-  zero_lt_one     := int.zero_lt_one,
-  decidable_eq    := int.decidable_eq,
-  decidable_le    := int.decidable_le,
-  decidable_lt    := int.decidable_lt }
+  le                    := int.le,
+  le_refl               := int.le_refl,
+  le_trans              := @int.le_trans,
+  le_antisymm           := @int.le_antisymm,
+  lt                    := int.lt,
+  lt_iff_le_not_le      := @int.lt_iff_le_not_le,
+  add_le_add_left_of_le := @int.add_le_add_left_of_le,
+  add_lt_add_left_of_lt := @int.add_lt_add_left_of_lt,
+  zero_ne_one           := zero_ne_one,
+  mul_nonneg            := @int.mul_nonneg,
+  mul_pos               := @int.mul_pos,
+  le_total              := int.le_total,
+  zero_lt_one           := int.zero_lt_one,
+  decidable_eq          := int.decidable_eq,
+  decidable_le          := int.decidable_le,
+  decidable_lt          := int.decidable_lt }
 
 instance : decidable_linear_ordered_comm_group int :=
 by apply_instance
@@ -246,13 +246,13 @@ theorem lt_of_add_one_le {a b : ℤ} (H : a + 1 ≤ b) : a < b := H
 theorem add_one_le_of_lt {a b : ℤ} (H : a < b) : a + 1 ≤ b := H
 
 theorem lt_add_one_of_le {a b : ℤ} (H : a ≤ b) : a < b + 1 :=
-add_le_add_right H 1
+add_le_add_of_le_right H _
 
 theorem le_of_lt_add_one {a b : ℤ} (H : a < b + 1) : a ≤ b :=
 le_of_add_le_add_right H
 
 theorem sub_one_le_of_lt {a b : ℤ} (H : a ≤ b) : a - 1 < b :=
-sub_right_lt_of_lt_add $ lt_add_one_of_le H
+sub_right_lt_of_lt_add  $ lt_add_one_of_le H
 
 theorem lt_of_sub_one_le {a b : ℤ} (H : a - 1 < b) : a ≤ b :=
 le_of_lt_add_one $ lt_add_of_sub_right_lt H
@@ -295,9 +295,9 @@ theorem sign_mul_abs (a : ℤ) : sign a * abs a = a :=
 by rw [abs_eq_nat_abs, sign_mul_nat_abs]
 
 theorem eq_one_of_mul_eq_self_left {a b : ℤ} (Hpos : a ≠ 0) (H : b * a = a) : b = 1 :=
-eq_of_mul_eq_mul_right Hpos (by rw [one_mul, H])
+eq_of_mul_eq_mul_of_nonzero_right Hpos (by rw [one_mul, H])
 
 theorem eq_one_of_mul_eq_self_right {a b : ℤ} (Hpos : b ≠ 0) (H : b * a = b) : a = 1 :=
-eq_of_mul_eq_mul_left Hpos (by rw [mul_one, H])
+eq_of_mul_eq_mul_of_nonzero_left Hpos (by rw [mul_one, H])
 
 end int

@@ -8,9 +8,9 @@ import init.algebra.ordered_field
 
 universe u
 
-definition min {α : Type u} [decidable_linear_order α] (a b : α) : α := if a ≤ b then a else b
-definition max {α : Type u} [decidable_linear_order α] (a b : α) : α := if a ≤ b then b else a
-definition abs {α : Type u} [decidable_linear_ordered_comm_group α] (a : α) : α := max a (-a)
+def min {α : Type u} [decidable_linear_order α] (a b : α) : α := if a ≤ b then a else b
+def max {α : Type u} [decidable_linear_order α] (a b : α) : α := if a ≤ b then b else a
+def abs {α : Type u} [decidable_linear_ordered_comm_group α] (a : α) : α := max a (-a)
 
 section
 open decidable tactic
@@ -135,8 +135,8 @@ variables {α : Type u} [decidable_linear_ordered_cancel_comm_monoid α]
 
 lemma min_add_add_left (a b c : α) : min (a + b) (a + c) = a + min b c :=
 eq.symm (eq_min
-  (show a + min b c ≤ a + b, from add_le_add_left (min_le_left _ _)  _)
-  (show a + min b c ≤ a + c, from add_le_add_left (min_le_right _ _)  _)
+  (show a + min b c ≤ a + b, from add_le_add_of_le_left (min_le_left _ _) _)
+  (show a + min b c ≤ a + c, from add_le_add_of_le_left (min_le_right _ _) _)
   (assume d,
     assume : d ≤ a + b,
     assume : d ≤ a + c,
@@ -149,8 +149,8 @@ begin rw [add_comm a c, add_comm b c, add_comm _ c], apply min_add_add_left end
 
 lemma max_add_add_left (a b c : α) : max (a + b) (a + c) = a + max b c :=
 eq.symm (eq_max
-  (add_le_add_left (le_max_left _ _)  _)
-  (add_le_add_left (le_max_right _ _) _)
+  (add_le_add_of_le_left (le_max_left _ _) _)
+  (add_le_add_of_le_left (le_max_right _ _) _)
   (assume d,
     assume : a + b ≤ d,
     assume : a + c ≤ d,
@@ -167,8 +167,8 @@ variables {α : Type u} [decidable_linear_ordered_comm_group α]
 
 lemma max_neg_neg (a b : α) : max (-a) (-b) = - min a b  :=
 eq.symm (eq_max
-  (show -a ≤ -(min a b), from neg_le_neg $ min_le_left a b)
-  (show -b ≤ -(min a b), from neg_le_neg $ min_le_right a b)
+  (show -a ≤ -(min a b), from neg_le_neg_of_le $ min_le_left a b)
+  (show -b ≤ -(min a b), from neg_le_neg_of_le $ min_le_right a b)
   (assume d,
     assume H₁ : -a ≤ d,
     assume H₂ : -b ≤ d,
@@ -288,8 +288,8 @@ decidable.by_cases
   calc
     abs (a + b) = a + b         : by rw (abs_of_nonneg h1)
             ... = abs a + b     : by rw (abs_of_nonneg h2)
-            ... ≤ abs a + 0     : add_le_add_left h4 _
-            ... ≤ abs a + -b    : add_le_add_left (neg_nonneg_of_nonpos h4) _
+            ... ≤ abs a + 0     : add_le_add_of_le_left h4 _
+            ... ≤ abs a + -b    : add_le_add_of_le_left (neg_nonneg_of_nonpos h4) _
             ... = abs a + abs b : by rw (abs_of_nonpos h4))
 
 private lemma aux2 {a b : α} (h1 : a + b ≥ 0) : abs (a + b) ≤ abs a + abs b :=
@@ -346,7 +346,7 @@ begin
   apply le_trans,
   apply abs_add_le_abs_add_abs,
   apply le_trans,
-  apply add_le_add_right,
+  apply add_le_add_of_le_right,
   apply abs_add_le_abs_add_abs,
   apply le_refl
 end
@@ -412,7 +412,7 @@ lemma sub_le_of_abs_sub_le_left {a b c : α} (h : abs (a - b) ≤ c) : b - c ≤
 if hz : 0 ≤ a - b then
   (calc
       a ≥ b     : le_of_sub_nonneg hz
-    ... ≥ b - c : sub_le_self _ (le_trans (abs_nonneg _) h))
+    ... ≥ b - c : sub_le_self_of_nonneg _ (le_trans (abs_nonneg _) h))
 else
   have habs : b - a ≤ c, by rwa [abs_of_neg (lt_of_not_ge hz), neg_sub] at h,
   have habs' : b ≤ c + a, from le_add_of_sub_right_le habs,
@@ -425,7 +425,7 @@ lemma sub_lt_of_abs_sub_lt_left {a b c : α} (h : abs (a - b) < c) : b - c < a :
 if hz : 0 ≤ a - b then
    (calc
       a ≥ b     : le_of_sub_nonneg hz
-    ... > b - c : sub_lt_self _ (lt_of_le_of_lt (abs_nonneg _) h))
+    ... > b - c : sub_lt_self_of_pos _ (lt_of_le_of_lt (abs_nonneg _) h))
 else
   have habs : b - a < c, by rwa [abs_of_neg (lt_of_not_ge hz), neg_sub] at h,
   have habs' : b < c + a, from lt_add_of_sub_right_lt habs,
@@ -443,7 +443,7 @@ end
 
 lemma eq_zero_of_mul_self_add_mul_self_eq_zero {x y : α} (h : x * x + y * y = 0) : x = 0 :=
 have x * x ≤ (0 : α), from calc
-  x * x ≤ x * x + y * y : le_add_of_nonneg_right (mul_self_nonneg y)
+  x * x ≤ x * x + y * y : le_add_of_nonneg_right _ (mul_self_nonneg y)
     ... = 0             : h,
 eq_zero_of_mul_self_eq_zero (le_antisymm this (mul_self_nonneg x))
 
@@ -454,9 +454,9 @@ begin
    repeat {rw abs_sub_square},
    repeat {rw abs_abs},
    repeat {rw abs_mul_abs_self},
-   apply sub_le_sub_left,
+   apply sub_le_sub_of_le_left,
    repeat {rw mul_assoc},
-   apply mul_le_mul_of_nonneg_left,
+   apply mul_le_mul_of_le_left,
    rw [← abs_mul],
    apply le_abs_self,
    apply le_of_lt,
@@ -467,8 +467,8 @@ end
 
 end decidable_linear_ordered_comm_ring
 
-section discrete_linear_ordered_field
-variables {α : Type u} [discrete_linear_ordered_field α]
+section decidable_linear_ordered_field
+variables {α : Type u} [decidable_linear_ordered_field α]
 
 lemma abs_div (a b : α) : abs (a / b) = abs a / abs b :=
 decidable.by_cases
@@ -476,10 +476,10 @@ decidable.by_cases
   (assume h : b ≠ 0,
    have h₁ : abs b ≠ 0, from
      assume h₂, h (eq_zero_of_abs_eq_zero h₂),
-   eq_div_of_mul_eq _ _ h₁
-   (show abs (a / b) * abs b = abs a, by rw [← abs_mul, div_mul_cancel _ h]))
+   eq_div_of_mul_eq h₁
+   (show abs (a / b) * abs b = abs a, by rw [← abs_mul, div_mul_cancel_right _ h]))
 
 lemma abs_one_div (a : α) : abs (1 / a) = 1 / abs a :=
 by rw [abs_div, abs_of_nonneg (zero_le_one : 1 ≥ (0 : α))]
 
-end discrete_linear_ordered_field
+end decidable_linear_ordered_field

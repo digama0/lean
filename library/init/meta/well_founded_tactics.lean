@@ -9,8 +9,7 @@ import init.data.list.qsort
 
 /- TODO(Leo): move this lemma, or delete it after we add algebraic normalizer. -/
 lemma nat.lt_add_of_zero_lt_left (a b : nat) (h : 0 < b) : a < a + b :=
-suffices a + 0 < a + b, by {simp at this, assumption},
-by {apply nat.add_lt_add_left, assumption}
+nat.add_lt_add_of_lt_left h _
 
 /- TODO(Leo): move this lemma, or delete it after we add algebraic normalizer. -/
 lemma nat.zero_lt_one_add (a : nat) : 0 < 1 + a :=
@@ -135,8 +134,7 @@ do `(%%lhs < %%rhs) ← target,
    let lhs_args := collect_add_args lhs,
    let rhs_args := collect_add_args rhs,
    let common   := lhs_args.bag_inter rhs_args,
-   if common = [] then return ()
-   else do
+   when (common ≠ []) $ do
      let lhs_rest := lhs_args.diff common,
      let rhs_rest := rhs_args.diff common,
      new_lhs    ← mk_nat_add_add common (sort_args lhs_rest),
@@ -146,7 +144,7 @@ do `(%%lhs < %%rhs) ← target,
      target_pr  ← to_expr ``(congr (congr_arg (<) %%lhs_pr) %%rhs_pr),
      new_target ← to_expr ``(%%new_lhs < %%new_rhs),
      replace_target new_target target_pr,
-     `[apply nat.add_lt_add_left] <|> `[apply nat.lt_add_of_zero_lt_left]
+     `[apply nat.add_lt_add_of_lt_left] <|> `[apply nat.lt_add_of_zero_lt_left]
 
 meta def check_target_is_value_lt : tactic unit :=
 do `(%%lhs < %%rhs) ← target,

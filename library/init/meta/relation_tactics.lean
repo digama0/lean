@@ -42,10 +42,7 @@ target >>= relation_lhs_rhs
 
 meta def subst_vars_aux : list expr → tactic unit
 | []      := failed
-| (h::hs) := do
-  o ← try_core (subst h),
-  if o.is_none then subst_vars_aux hs
-  else return ()
+| (h::hs) := mwhen (option.is_none <$> try_core (subst h)) (subst_vars_aux hs)
 
 /-- Try to apply subst exhaustively -/
 meta def subst_vars : tactic unit :=

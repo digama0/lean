@@ -55,15 +55,11 @@ meta def lift {A} (action : state ir_compiler_state A) : ir_compiler A :=
 
 meta def trace_ir (s : string) : ir_compiler unit := do
   (conf, map, counter) ← lift $ state.read,
-  if config.debug conf
-  then trace s (return ())
-  else return ()
+  when (config.debug conf) $ trace s (return ())
 
 -- An `exotic` monad combinator that accumulates errors.
-meta def run {M E A} (res : native.resultT M E A) : M (native.result E A) :=
-  match res with
-  | ⟨action⟩ := action
-  end
+meta def run {M E A} : native.resultT M E A → M (native.result E A)
+| ⟨action⟩ := action
 
 meta def sequence_err : list (ir_compiler format) → ir_compiler (list format × list error)
 | [] := return ([], [])

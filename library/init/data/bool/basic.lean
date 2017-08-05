@@ -4,7 +4,7 @@
 prelude
 import init.core
 
-@[inline] def {u} cond {a : Type u} : bool → a → a → a
+@[inline] def {u} cond {a : Sort u} : bool → a → a → a
 | tt x y := x
 | ff x y := y
 

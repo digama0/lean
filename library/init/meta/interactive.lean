@@ -6,7 +6,7 @@ Authors: Leonardo de Moura
 prelude
 import init.meta.tactic init.meta.rewrite_tactic init.meta.simp_tactic
 import init.meta.smt.congruence_closure init.category.combinators
-import init.meta.interactive_base
+import init.meta.interactive_base init.meta.congr_tactic
 
 open lean
 open lean.parser
@@ -1028,6 +1028,12 @@ tactic.by_contradiction n >> return ()
 
 meta def by_contra (n : parse ident?) : tactic unit :=
 tactic.by_contradiction n >> return ()
+
+meta def congr : tactic unit :=
+tactic.congr
+
+meta def rel_congr : tactic unit :=
+tactic.rel_congr
 
 /-- Type check the given expression, and trace its type. -/
 meta def type_check (p : parse texpr) : tactic unit :=

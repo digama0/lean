@@ -168,7 +168,7 @@ attribute [refl] eq.refl
 @[pattern] def rfl {α : Sort u} {a : α} : a = a := eq.refl a
 
 @[elab_as_eliminator, subst]
-lemma eq.subst {α : Sort u} {P : α → Prop} {a b : α} (h₁ : a = b) (h₂ : P a) : P b :=
+def eq.subst {α : Sort u} {P : α → Sort v} {a b : α} (h₁ : a = b) (h₂ : P a) : P b :=
 eq.rec h₂ h₁
 
 notation h1 ▸ h2 := eq.subst h1 h2

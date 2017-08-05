@@ -34,6 +34,9 @@ propext (iff.intro
   (assume h, iff.to_eq h)
   (assume h, h.to_iff))
 
+instance Prop.eq_dec {p q : Prop} [decidable p] [decidable q] : decidable (p = q) :=
+@iff_eq_eq p q ▸ iff.decidable
+
 lemma eq_false {a : Prop} : (a = false) = (¬ a) :=
 have (a ↔ false) = (¬ a), from propext (iff_false a),
 eq.subst (@iff_eq_eq a false) this

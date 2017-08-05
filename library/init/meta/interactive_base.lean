@@ -41,8 +41,8 @@ meta def loc.get_locals : loc → tactic (list expr)
 meta def loc.apply (hyp_tac : expr → tactic unit) (goal_tac : tactic unit) (l : loc) : tactic unit :=
 do hs ← l.get_locals,
    hs.mmap' hyp_tac,
-   if l.include_goal then goal_tac else pure ()
-
+   monad.whenb l.include_goal goal_tac
+   
 meta def loc.try_apply (hyp_tac : expr → tactic unit) (goal_tac : tactic unit) (l : loc) : tactic unit :=
 do hs ← l.get_locals,
    let hts := hs.map hyp_tac,

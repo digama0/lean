@@ -214,13 +214,13 @@ lemma length_le_of_sublist : ∀ {l₁ l₂ : list α}, l₁ <+ l₂ → length 
 /- filter -/
 @[simp] theorem filter_nil (p : α → Prop) [h : decidable_pred p] : filter p [] = [] := rfl
 
-@[simp] theorem filter_cons_of_pos {p : α → Prop} [h : decidable_pred p] {a : α} :
-   ∀ l, p a → filter p (a::l) = a :: filter p l :=
-λ l pa, if_pos pa
+@[simp] theorem filter_cons_of_pos {p : α → Prop} [h : decidable_pred p] {a : α}
+   (l) (pa : p a) : filter p (a::l) = a :: filter p l :=
+if_pos pa
 
-@[simp] theorem filter_cons_of_neg {p : α → Prop} [h : decidable_pred p] {a : α} :
-  ∀ l, ¬ p a → filter p (a::l) = filter p l :=
-λ l pa, if_neg pa
+@[simp] theorem filter_cons_of_neg {p : α → Prop} [h : decidable_pred p] {a : α}
+  (l) (pa : ¬ p a) : filter p (a::l) = filter p l :=
+if_neg pa
 
 @[simp] theorem filter_append {p : α → Prop} [h : decidable_pred p] :
   ∀ (l₁ l₂ : list α), filter p (l₁++l₂) = filter p l₁ ++ filter p l₂

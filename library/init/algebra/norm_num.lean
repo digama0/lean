@@ -41,7 +41,7 @@ begin rw [← h], simp end
 lemma mul_bit1 [semiring α] (a b : α) : a * (bit1 b) = bit0 (a * b) + a :=
 by simp
 
-lemma mul_bit1_helper [semiring α] (a b s t : α) (hs : a * b = s) (ht : bit0 s + a  = t) :
+lemma mul_bit1_helper [semiring α] (a b s t : α) (hs : a * b = s) (ht : bit0 s + a = t) :
         a * (bit1 b) = t :=
 by simp [hs, ht]
 
@@ -52,14 +52,14 @@ lemma mk_cong (op : α → α) (a b : α) (h : a = b) : op a = op b :=
 by simp [h]
 
 lemma neg_add_neg_eq_of_add_add_eq_zero [add_comm_group α] (a b c : α) (h : c + a + b = 0) : -a + -b = c :=
-begin
+ begin
   apply add_neg_eq_of_eq_add,
   apply neg_eq_of_add_eq_zero,
-  simp at h, simp, assumption
+  simp at h, simp [h]
 end
 
 lemma neg_add_neg_helper [add_comm_group α] (a b c : α) (h : a + b = c) : -a + -b = -c :=
-begin apply @neg_inj α, simp [neg_add, neg_neg], assumption end
+by rw [← neg_add, neg_inj, h]
 
 lemma neg_add_pos_eq_of_eq_add [add_comm_group α] (a b c : α) (h : b = c + a) : -a + b = c :=
 begin apply neg_add_eq_of_eq_add, simp at h, assumption end
@@ -92,19 +92,19 @@ lemma div_add_helper [field α] (n d b c val : α) (hd : d ≠ 0) (h : n + b * d
         (h2 : c * d = val) : n / d + b = c :=
 begin
   apply eq_of_mul_eq_mul_of_nonzero_right hd,
-  rw [h2, ← h, right_distrib, div_mul_cancel _ hd]
+  rw [h2, ← h, right_distrib, div_mul_cancel_right _ hd]
 end
 
 lemma add_div_helper [field α] (n d b c val : α) (hd : d ≠ 0) (h : d * b + n = val)
         (h2 : d * c = val) : b + n / d = c :=
 begin
   apply eq_of_mul_eq_mul_of_nonzero_left hd,
-  rw [h2, ← h, left_distrib, mul_div_cancel' _ hd]
+  rw [h2, ← h, left_distrib, mul_div_cancel_right' _ hd]
 end
 
 lemma div_mul_helper [field α] (n d c v : α) (hd : d ≠ 0) (h : (n * c) / d = v) :
         (n / d) * c = v :=
-by rw [← h, field.div_mul_eq_mul_div_comm _ _ hd, mul_div_assoc]
+by rw [← h, field.div_mul_eq_mul_div_comm, mul_div_assoc]
 
 lemma mul_div_helper [field α] (a n d v : α) (hd : d ≠ 0) (h : (a * n) / d = v) :
         a * (n / d) = v :=
@@ -114,14 +114,14 @@ lemma nonzero_of_div_helper [field α] (a b : α) (ha : a ≠ 0) (hb : b ≠ 0) 
 begin
   intro hab,
   have habb : (a / b) * b = 0, rw [hab, zero_mul],
-  rw [div_mul_cancel _ hb] at habb,
+  rw [div_mul_cancel_right _ hb] at habb,
   exact ha habb
 end
 
 lemma div_helper [field α] (n d v : α) (hd : d ≠ 0) (h : v * d = n) : n / d = v :=
 begin
   apply eq_of_mul_eq_mul_of_nonzero_right hd,
-  rw (div_mul_cancel _ hd),
+  rw (div_mul_cancel_right _ hd),
   exact eq.symm h
 end
 
@@ -252,7 +252,7 @@ lemma nonzero_of_pos_helper [linear_ordered_semiring α] (a : α) (h : a > 0) : 
   ne_of_gt h
 
 lemma nonzero_of_neg_helper [linear_ordered_ring α] (a : α) (h : a ≠ 0) : -a ≠ 0 :=
-begin intro ha, apply h, apply neg_inj, rwa neg_zero end
+begin intro ha, apply h, apply eq_of_neg_eq_neg, rwa neg_zero end
 
 lemma sub_nat_zero_helper {a b c d: ℕ} (hac : a = c) (hbd : b = d) (hcd : c < d) : a - b = 0 :=
 begin

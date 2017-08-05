@@ -451,6 +451,9 @@ iff.intro
 lemma or_assoc (a b : Prop) : (a ∨ b) ∨ c ↔ a ∨ (b ∨ c) :=
 or.assoc
 
+lemma or_rotate : a ∨ b ∨ c ↔ b ∨ c ∨ a :=
+or.comm.trans or.assoc
+
 @[simp] lemma or.left_comm : a ∨ (b ∨ c) ↔ b ∨ (a ∨ c) :=
 iff.trans (iff.symm or.assoc) (iff.trans (or_congr or.comm (iff.refl c)) or.assoc)
 
@@ -702,7 +705,7 @@ end
 instance {α : Sort u} [decidable_eq α] (a b : α) : decidable (a ≠ b) :=
 implies.decidable
 
-lemma bool.ff_ne_tt : ff = tt → false
+lemma ff_ne_tt : ff ≠ tt
 .
 
 def is_dec_eq {α : Sort u} (p : α → α → bool) : Prop   := ∀ ⦃x y : α⦄, p x y = tt → x = y
@@ -711,8 +714,8 @@ def is_dec_refl {α : Sort u} (p : α → α → bool) : Prop := ∀ x, p x x = 
 open decidable
 instance : decidable_eq bool
 | ff ff := is_true rfl
-| ff tt := is_false bool.ff_ne_tt
-| tt ff := is_false (ne.symm bool.ff_ne_tt)
+| ff tt := is_false ff_ne_tt
+| tt ff := is_false (ne.symm ff_ne_tt)
 | tt tt := is_true rfl
 
 def decidable_eq_of_bool_pred {α : Sort u} {p : α → α → bool} (h₁ : is_dec_eq p) (h₂ : is_dec_refl p) : decidable_eq α :=

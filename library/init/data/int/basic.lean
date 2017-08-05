@@ -296,19 +296,19 @@ protected lemma rel_eq : (rel_int_nat_nat ⇒ (rel_int_nat_nat ⇒ iff))
   eq (λa b, a.1 + b.2 = b.1 + a.2)
 | ._ ._ (@rel_int_nat_nat.pos m p) ._ ._ (@rel_int_nat_nat.pos m' p') :=
   calc of_nat p = of_nat p'
-        ↔ (m + m') + p = (m + m') + p' : by rw [of_nat_eq_of_nat_iff, add_left_cancel_iff]
+        ↔ (m + m') + p = (m + m') + p' : by rw [of_nat_eq_of_nat_iff, add_left_inj]
     ... ↔ (m + p) + m' = (m' + p') + m : by simp
 | ._ ._ (@rel_int_nat_nat.pos m p) ._ ._ (@rel_int_nat_nat.neg m' n') :=
   calc of_nat p = -[1+ n'] ↔ (m' + m) + (n' + p + 1) = (m' + m) + 0 :
-     begin rw [add_left_cancel_iff], apply iff.intro, repeat {intro, contradiction} end
+     begin rw [add_left_inj], apply iff.intro, repeat {intro, contradiction} end
    ... ↔ (m + p) + (m' + n' + 1) = m' + m : by simp
 | ._ ._ (@rel_int_nat_nat.neg m n) ._ ._ (@rel_int_nat_nat.pos m' p') :=
   calc -[1+ n] = of_nat p' ↔ (m + m') + 0 = (m + m') + (n + p' + 1) :
-     begin rw [add_left_cancel_iff], apply iff.intro, repeat {intro, contradiction} end
+     begin rw [add_left_inj], apply iff.intro, repeat {intro, contradiction} end
    ... ↔ m + m' = m' + p' + (m + n + 1) : by simp
 | ._ ._ (@rel_int_nat_nat.neg m n) ._ ._ (@rel_int_nat_nat.neg m' n') :=
   calc -[1+ n] = -[1+ n'] ↔ (m + m' + 1) + n' = (m + m' + 1) + n :
-      by rw [neg_succ_of_nat_inj_iff, add_left_cancel_iff, eq_comm]
+      by rw [neg_succ_of_nat_inj_iff, add_left_inj, eq_comm]
     ... ↔ m + (m' + n' + 1) = m' + (m + n + 1) : by simp
 
 /- should this be more general, i.e. ∀{n}, rel_int_nat_nat 0 (n, n) ? -/
@@ -448,7 +448,7 @@ protected lemma sub_nat_nat_eq_coe {m n : ℕ} : sub_nat_nat m n = ↑m - ↑n :
 sub_nat_nat_elim m n (λm n i, i = ↑m - ↑n)
   (λi n, by simp [int.coe_nat_add]; refl)
   (λi n, by simp [int.coe_nat_add, int.coe_nat_one, int.neg_succ_of_nat_eq];
-            apply congr_arg; rw[add_left_comm]; simp)
+            rw[add_left_comm]; simp)
 
 def to_nat : ℤ → ℕ
 | (n : ℕ) := n

@@ -14,12 +14,12 @@ namespace int
 /- 1. Lemmas for reducing the problem to the case where the numerals are positive -/
 
 protected lemma ne_neg_of_ne {a b : ℤ} : a ≠ b → -a ≠ -b :=
-λ h₁ h₂, absurd (neg_inj h₂) h₁
+λ h₁ h₂, absurd (eq_of_neg_eq_neg h₂) h₁
 
 protected lemma neg_ne_zero_of_ne {a : ℤ} : a ≠ 0 → -a ≠ 0 :=
 λ h₁ h₂,
   have -a = -0, by rwa neg_zero,
-  have a = 0, from neg_inj this,
+  have a = 0, from eq_of_neg_eq_neg this,
   by contradiction
 
 protected lemma zero_ne_neg_of_ne {a : ℤ} (h : 0 ≠ a) : 0 ≠ -a :=
@@ -44,7 +44,7 @@ protected lemma bit0_pos {a : ℤ} : a > 0 → bit0 a > 0 :=
 λ h, add_pos h h
 
 protected lemma bit1_pos {a : ℤ} : a ≥ 0 → bit1 a > 0 :=
-λ h, lt_add_of_le_of_pos (add_nonneg h h) zero_lt_one
+λ h, add_lt_add_of_le_of_lt (add_nonneg h h) zero_lt_one
 
 protected lemma zero_nonneg : (0:int) ≥ 0 :=
 le_refl 0
