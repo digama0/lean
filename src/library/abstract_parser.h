@@ -22,12 +22,15 @@ struct parser_error : public exception_with_pos {
     virtual void rethrow() const override { throw *this; }
 };
 
+typedef unsigned ast_id;
+
 /** \brief Base class for frontend parsers with basic functions */
 class abstract_parser : public pos_info_provider {
 public:
     /** \brief Return the current position information */
     virtual pos_info pos() const = 0;
-
+    /** \brief Return the last parsed ast node */
+    virtual ast_id & last_ast() = 0;
     /** \brief Return true iff the current token is a keyword (or command keyword) named \c tk */
     virtual bool curr_is_token(name const & tk) const = 0;
     /** \brief Return true iff the current token is a numeral */
@@ -35,7 +38,7 @@ public:
     /** \brief Read the next token if the current one is not End-of-file. */
     virtual void next() = 0;
 
-    virtual unsigned parse_small_nat() = 0;
-    virtual std::string parse_string_lit() = 0;
+    virtual std::pair<ast_id, unsigned> parse_small_nat() = 0;
+    virtual std::pair<ast_id, std::string> parse_string_lit() = 0;
 };
 }

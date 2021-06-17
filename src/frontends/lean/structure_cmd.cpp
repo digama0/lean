@@ -314,13 +314,17 @@ struct structure_cmd_fn {
     void parse_decl_name() {
         m_name_pos = m_p.pos();
         buffer<name> ls_buffer;
-        if (parse_univ_params(m_p, ls_buffer)) {
+        auto id = parse_univ_params(m_p, ls_buffer);
+        auto& data = m_p.cmd_ast_data();
+        data.m_children.push_back(id);
+        if (id) {
             m_explicit_universe_params = true;
             m_level_names.append(ls_buffer);
         } else {
             m_explicit_universe_params = false;
         }
-        m_given_name = m_p.check_decl_id_next("invalid 'structure', identifier expected");
+        std::tie(id, m_given_name) = m_p.check_decl_id_next("invalid 'structure', identifier expected");
+        data.m_children.push_back(id);
         if (is_private()) {
             std::tie(m_env, m_private_prefix) = mk_private_prefix(m_env);
             m_name = m_private_prefix + m_given_name;
@@ -1308,11 +1312,17 @@ struct structure_cmd_fn {
             m_mk_pos = m_p.pos();
             if (m_p.curr_is_token(get_lparen_tk()) || m_p.curr_is_token(get_lcurly_tk()) ||
                 m_p.curr_is_token(get_lbracket_tk())) {
+                m_p.cmd_ast_data().m_children.push_back(0);
                 m_mk_short = LEAN_DEFAULT_STRUCTURE_INTRO;
                 m_mk_infer = implicit_infer_kind::RelaxedImplicit;
             } else {
-                m_mk_short = m_p.check_atomic_id_next("invalid 'structure', atomic identifier expected");
-                m_mk_infer = parse_implicit_infer_modifier(m_p);
+                auto& mk = m_p.new_ast("mk", m_p.pos());
+                m_p.cmd_ast_data().m_children.push_back(mk.m_id);
+                ast_id id;
+                std::tie(id, m_mk_short) = m_p.check_atomic_id_next("invalid 'structure', atomic identifier expected");
+                mk.m_children.push_back(id);
+                std::tie(id, m_mk_infer) = parse_implicit_infer_modifier(m_p);
+                mk.m_children.push_back(id);
                 if (!m_p.curr_is_command_like())
                     m_p.check_token_next(get_dcolon_tk(), "invalid 'structure', '::' expected");
             }
@@ -1356,6 +1366,7 @@ environment class_cmd(parser & p, cmd_meta const & _meta) {
     meta.m_attrs.set_attribute(p.env(), "class");
     p.next();
     if (p.curr_is_token(get_inductive_tk())) {
+        p.cmd_ast_data().m_type = "class_inductive";
         return inductive_cmd(p, meta);
     } else {
         return structure_cmd_fn(p, meta)();

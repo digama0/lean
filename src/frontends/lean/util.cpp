@@ -256,6 +256,7 @@ level mk_result_level(buffer<level> const & r_lvls) {
 
 std::tuple<expr, level_param_names> parse_local_expr(parser & p, name const & decl_name, metavar_context & mctx, bool relaxed) {
     expr e = p.parse_expr();
+    p.cmd_ast_data().m_children.push_back(p.get_id(e));
     bool check_unassigend = !relaxed;
     expr new_e; level_param_names ls;
     std::tie(new_e, ls) = p.elaborate(decl_name, mctx, e, check_unassigend);
@@ -368,17 +369,18 @@ static bool is_tactic_unit(environment const & env, expr const & c) {
     return tc.is_def_eq(tc.infer(c), mk_tactic_unit());
 }
 
-expr parse_auto_param(parser & p, expr const & type) {
+pair<ast_id, expr> parse_auto_param(parser & p, expr const & type) {
     p.next();
     auto pos      = p.pos();
-    name tac_id   = p.check_decl_id_next("invalid auto_param, identifier expected");
+    ast_id id; name tac_id;
+    std::tie(id, tac_id) = p.check_decl_id_next("invalid auto_param, identifier expected");
     if (get_auto_param_check_exists(p.get_options())) {
         expr tac_expr = p.id_to_expr(tac_id, pos, true);
         if (!is_tactic_unit(p.env(), tac_expr))
             throw parser_error(sstream() << "invalid auto_param, '" << tac_id << "' must have type (tactic unit)", pos);
-        return mk_auto_param(type, const_name(tac_expr));
+        return {id, mk_auto_param(type, const_name(tac_expr))};
     } else {
-        return mk_auto_param(type, tac_id);
+        return {id, mk_auto_param(type, tac_id)};
     }
 }
 
@@ -428,26 +430,26 @@ public:
     }
 };
 
-expr mk_field_notation(expr const & e, name const & field) {
+expr mk_field_notation(expr const & e, ast_id field_id, name const & field) {
     macro_definition def(new field_notation_macro_cell(field));
     return mk_macro(def, 1, &e);
 }
 
-expr mk_field_notation_compact(expr const & e, char const * field) {
+expr mk_field_notation_compact(expr const & e, ast_id field_id, char const * field) {
     name fname(field);
     if (is_choice(e)) {
         buffer<expr> new_es;
         for (unsigned i = 0; i < get_num_choices(e); i++) {
             expr const & c = get_choice(e, i);
-            new_es.push_back(copy_tag(c, mk_field_notation(c, fname)));
+            new_es.push_back(copy_tag(c, mk_field_notation(c, field_id, fname)));
         }
         return mk_choice(new_es.size(), new_es.data());
     } else {
-        return mk_field_notation(e, fname);
+        return mk_field_notation(e, field_id, fname);
     }
 }
 
-expr mk_field_notation(expr const & e, unsigned fidx) {
+expr mk_field_notation(expr const & e, ast_id field_id, unsigned fidx) {
     macro_definition def(new field_notation_macro_cell(fidx));
     return mk_macro(def, 1, &e);
 }
@@ -488,9 +490,9 @@ void initialize_frontend_lean_util() {
                                     name fname; unsigned fidx;
                                     d >> fname >> fidx;
                                     if (fname.is_anonymous())
-                                        return mk_field_notation(args[0], fidx);
+                                        return mk_field_notation(args[0], 0, fidx);
                                     else
-                                        return mk_field_notation(args[0], fname);
+                                        return mk_field_notation(args[0], 0, fname);
                                 });
 }
 

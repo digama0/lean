@@ -62,33 +62,49 @@ expr mk_sort_wo_universe(parser & p, pos_info const & pos, bool is_type) {
 }
 
 static expr parse_Type(parser & p, unsigned, expr const *, pos_info const & pos) {
+    expr r; ast_id id = 0;
     if (p.curr_is_token(get_llevel_curly_tk())) {
         p.next();
-        level l = mk_succ(p.parse_level());
+        level l;
+        std::tie(id, l) = p.parse_level();
         p.check_token_next(get_rcurly_tk(), "invalid Type expression, '}' expected");
-        return p.save_pos(mk_sort(l), pos);
+        r = p.save_pos(mk_sort(mk_succ(l)), pos);
     } else {
-        return mk_sort_wo_universe(p, pos, true);
+        r = mk_sort_wo_universe(p, pos, true);
     }
+    auto& data = p.new_ast("Type", pos);
+    data.m_children.push_back(id);
+    p.set_ast_pexpr(data.m_id, r);
+    return r;
 }
 
 static expr parse_Sort(parser & p, unsigned, expr const *, pos_info const & pos) {
+    expr r; ast_id id = 0;
     if (p.curr_is_token(get_llevel_curly_tk())) {
         p.next();
-        level l = p.parse_level();
+        level l;
+        std::tie(id, l) = p.parse_level();
         p.check_token_next(get_rcurly_tk(), "invalid Sort expression, '}' expected");
-        return p.save_pos(mk_sort(l), pos);
+        r = p.save_pos(mk_sort(l), pos);
     } else {
-        return mk_sort_wo_universe(p, pos, false);
+        r = mk_sort_wo_universe(p, pos, false);
     }
+    auto& data = p.new_ast("Type", pos);
+    data.m_children.push_back(id);
+    p.set_ast_pexpr(data.m_id, r);
+    return r;
 }
 
 static expr parse_Type_star(parser & p, unsigned, expr const *, pos_info const & pos) {
-    return p.save_pos(mk_sort(mk_succ(mk_level_placeholder())), pos);
+    expr r = p.save_pos(mk_sort(mk_succ(mk_level_placeholder())), pos);
+    p.set_ast_pexpr(p.new_ast("Type*", pos).m_id, r);
+    return r;
 }
 
 static expr parse_Sort_star(parser & p, unsigned, expr const *, pos_info const & pos) {
-    return p.save_pos(mk_sort(mk_level_placeholder()), pos);
+    expr r = p.save_pos(mk_sort(mk_level_placeholder()), pos);
+    p.set_ast_pexpr(p.new_ast("Sort*", pos).m_id, r);
+    return r;
 }
 
 static name * g_let_match_name = nullptr;
@@ -143,7 +159,8 @@ static expr parse_let(parser & p, pos_info const & pos, bool in_do_block) {
         return parse_let_body(p, pos, in_do_block);
     } else if (p.curr_is_identifier()) {
         auto id_pos     = p.pos();
-        name id         = p.check_atomic_id_next("invalid let declaration, atomic identifier expected");
+        // TODO(Mario)
+        name id         = p.check_atomic_id_next("invalid let declaration, atomic identifier expected").second;
         expr type;
         expr value;
         if (p.curr_is_token(get_assign_tk())) {
@@ -645,7 +662,8 @@ static expr parse_quoted_name(parser & p, unsigned, expr const *, pos_info const
             id = p.get_token_info().token();
             p.next();
         } else {
-            id = p.check_id_next("invalid quoted name, identifier expected");
+            // TODO(Mario)
+            id = p.check_id_next("invalid quoted name, identifier expected").second;
         }
     }
     if (resolve) {
@@ -1058,11 +1076,11 @@ parse_table init_nud_table() {
 static expr parse_field(parser & p, unsigned, expr const * args, pos_info const & pos) {
     try {
         if (p.curr_is_numeral()) {
-            unsigned fidx = p.parse_small_nat();
-            return p.save_pos(mk_field_notation(args[0], fidx), pos);
+            auto fidx = p.parse_small_nat();
+            return p.save_pos(mk_field_notation(args[0], fidx.first, fidx.second), pos);
         } else {
-            name field = p.check_id_next("identifier or numeral expected");
-            return p.save_pos(mk_field_notation(args[0], field), pos);
+            auto field = p.check_id_next("identifier or numeral expected");
+            return p.save_pos(mk_field_notation(args[0], field.first, field.second), pos);
         }
     } catch (break_at_pos_exception & ex) {
         if (!p.get_complete()) {

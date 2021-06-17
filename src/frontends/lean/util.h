@@ -110,7 +110,7 @@ bool is_no_info(expr const & e);
 
 expr mk_opt_param(expr const & t, expr const & val);
 expr mk_auto_param(expr const & t, name const & tac_name);
-expr parse_auto_param(parser & p, expr const & type);
+pair<ast_id, expr> parse_auto_param(parser & p, expr const & type);
 
 /* Add frozen annotation around constants and local constants occurring in \c e.
    This annotation is used to prevent lean from resolving the names again
@@ -124,9 +124,9 @@ expr freeze_names(expr const & e);
 bool is_frozen_name(expr const & e);
 
 /* Field notation support */
-expr mk_field_notation(expr const & e, name const & field);
-expr mk_field_notation_compact(expr const & e, char const * field);
-expr mk_field_notation(expr const & e, unsigned fidx);
+expr mk_field_notation(expr const & e, ast_id field_id, name const & field);
+expr mk_field_notation_compact(expr const & e, ast_id field_id, char const * field);
+expr mk_field_notation(expr const & e, ast_id field_id, unsigned fidx);
 bool is_field_notation(expr const & e);
 bool is_anonymous_field_notation(expr const & e);
 name const & get_field_notation_field_name(expr const & e);

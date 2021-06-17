@@ -54,6 +54,7 @@ static environment universes_cmd_core(parser & p, bool local) {
     environment env = p.env();
     while (p.curr_is_identifier()) {
         name n = p.get_name_val();
+        p.cmd_ast_data().m_children.push_back(p.new_ast("ident", p.pos(), n).m_id);
         p.next();
         env = declare_universe(p, env, n, local);
     }
@@ -70,7 +71,9 @@ static environment universe_cmd(parser & p) {
             p.next();
             local = true;
         }
-        name n = p.check_decl_id_next("invalid 'universe' command, identifier expected");
+        ast_id id; name n;
+        std::tie(id, n) = p.check_decl_id_next("invalid 'universe' command, identifier expected");
+        p.cmd_ast_data().m_children.push_back(id);
         return declare_universe(p, p.env(), n, local);
     }
 }
@@ -313,15 +316,15 @@ static environment variable_cmd_core(parser & p, variable_kind k, cmd_meta const
 static environment variable_cmd(parser & p, cmd_meta const & meta) {
     return variable_cmd_core(p, variable_kind::Variable, meta);
 }
-static environment axiom_cmd(parser & p, cmd_meta const & meta)    {
+static environment axiom_cmd(parser & p, cmd_meta const & meta) {
     if (meta.m_modifiers.m_is_meta)
         throw exception("invalid 'meta' modifier for axiom");
     return variable_cmd_core(p, variable_kind::Axiom, meta);
 }
-static environment constant_cmd(parser & p, cmd_meta const & meta)    {
+static environment constant_cmd(parser & p, cmd_meta const & meta) {
     return variable_cmd_core(p, variable_kind::Constant, meta);
 }
-static environment parameter_cmd(parser & p, cmd_meta const & meta)    {
+static environment parameter_cmd(parser & p, cmd_meta const & meta) {
     return variable_cmd_core(p, variable_kind::Parameter, meta);
 }
 
@@ -345,11 +348,14 @@ static void ensure_no_match_in_variables_cmd(pos_info const & pos) {
 }
 
 static environment variables_cmd_core(parser & p, variable_kind k, cmd_meta const & meta) {
-    check_variable_kind(p, k);
     auto pos = p.pos();
     module::scope_pos_info scope_pos(pos);
     declaration_info_scope d_scope(p, decl_cmd_kind::Var, meta.m_modifiers);
     optional<binder_info> bi = parse_binder_info(p, k);
+    auto& ast = p.new_ast(name("binder").append_after(bi ? bi->hash() : 0), pos);
+    p.cmd_ast_data().m_children.push_back(ast.m_id);
+    auto& vars = p.new_ast("vars", pos);
+    ast.m_children.push_back(vars.m_id);
     buffer<name> ids;
     optional<parser::local_scope> scope1;
     expr type;
@@ -361,13 +367,17 @@ static environment variables_cmd_core(parser & p, variable_kind k, cmd_meta cons
             p.next();
             if (p.curr_is_token(get_colon_tk())) {
                 /* simple decl: variables [decA : decidable A] */
+                vars.m_children.push_back(p.new_ast("var", id_pos).m_id);
                 p.next();
                 ids.push_back(id);
                 type = p.parse_expr();
+                ast.m_children.push_back(p.get_id(type));
                 ensure_no_match_in_variables_cmd(pos);
             } else if (p.curr_is_token(get_rbracket_tk())) {
                 /* annotation update: variables [decA] */
+                vars.m_children.push_back(p.new_ast("var", id_pos).m_id);
                 p.parse_close_binder_info(bi);
+                ast.m_children.push_back(0);
                 update_local_binder_info(p, k, id, bi, pos);
                 if (curr_is_binder_annotation(p))
                     return variables_cmd_core(p, k, meta);
@@ -383,6 +393,8 @@ static environment variables_cmd_core(parser & p, variable_kind k, cmd_meta cons
                 }
                 ids.push_back(id);
                 type = left;
+                ast.m_children.back() = 0;
+                ast.m_children.push_back(p.get_id(type));
                 ensure_no_match_in_variables_cmd(pos);
             }
         } else {
@@ -390,12 +402,15 @@ static environment variables_cmd_core(parser & p, variable_kind k, cmd_meta cons
             name id = p.mk_anonymous_inst_name();
             ids.push_back(id);
             type = p.parse_expr();
+            ast.m_children.back() = 0;
+            ast.m_children.push_back(p.get_id(type));
             ensure_no_match_in_variables_cmd(pos);
         }
     } else {
         /* non instance implicit cases */
         while (p.curr_is_identifier()) {
             name id = p.get_name_val();
+            vars.m_children.push_back(p.new_ast("var", p.pos()).m_id);
             p.next();
             ids.push_back(id);
         }
@@ -406,6 +421,7 @@ static environment variables_cmd_core(parser & p, variable_kind k, cmd_meta cons
             /* example: variables (A) */
             if (k == variable_kind::Parameter || k == variable_kind::Variable) {
                 p.parse_close_binder_info(bi);
+                ast.m_children.push_back(0);
                 for (name const & id : ids) {
                     update_local_binder_info(p, k, id, bi, pos);
                 }
@@ -420,6 +436,7 @@ static environment variables_cmd_core(parser & p, variable_kind k, cmd_meta cons
         if (k == variable_kind::Constant || k == variable_kind::Axiom)
             scope1.emplace(p);
         type = p.parse_expr();
+        ast.m_children.push_back(p.get_id(type));
         ensure_no_match_in_variables_cmd(pos);
     }
     p.parse_close_binder_info(bi);
@@ -450,17 +467,24 @@ static environment variables_cmd_core(parser & p, variable_kind k, cmd_meta cons
     }
     return env;
 }
+static environment gen_variables_cmd(parser & p, variable_kind k, cmd_meta const & meta) {
+    check_variable_kind(p, k);
+    auto& cmd = p.cmd_ast_data();
+    cmd.m_children.push_back(meta.m_modifiers_id);
+    return variables_cmd_core(p, k, meta);
+}
+
 static environment variables_cmd(parser & p, cmd_meta const & meta) {
-    return variables_cmd_core(p, variable_kind::Variable, meta);
+    return gen_variables_cmd(p, variable_kind::Variable, meta);
 }
 static environment parameters_cmd(parser & p, cmd_meta const & meta) {
-    return variables_cmd_core(p, variable_kind::Parameter, meta);
+    return gen_variables_cmd(p, variable_kind::Parameter, meta);
 }
 static environment constants_cmd(parser & p, cmd_meta const & meta) {
-    return variables_cmd_core(p, variable_kind::Constant, meta);
+    return gen_variables_cmd(p, variable_kind::Constant, meta);
 }
 static environment axioms_cmd(parser & p, cmd_meta const & meta) {
-    return variables_cmd_core(p, variable_kind::Axiom, meta);
+    return gen_variables_cmd(p, variable_kind::Axiom, meta);
 }
 
 static environment definition_cmd(parser & p, cmd_meta const & meta) {
@@ -489,17 +513,29 @@ static environment instance_cmd(parser & p, cmd_meta const & _meta) {
 
 static environment modifiers_cmd(parser & p, cmd_meta const & _meta) {
     auto meta = _meta;
+    auto tk = p.pop_command();
+    auto& mods = p.new_ast("modifiers", p.ast_pos(tk));
     if (p.curr_is_token(get_private_tk())) {
+        mods.m_children.push_back(tk);
+        tk = 0;
         meta.m_modifiers.m_is_private = true;
         p.next();
     } else if (p.curr_is_token(get_protected_tk())) {
+        mods.m_children.push_back(tk);
+        tk = 0;
         meta.m_modifiers.m_is_protected = true;
         p.next();
     }
 
     if (p.curr_is_token(get_noncomputable_tk())) {
+        if (!tk) tk = p.new_ast(get_noncomputable_tk(), p.pos()).m_id;
+        mods.m_children.push_back(tk);
+        tk = 0;
         p.next();
         if (!meta.m_attrs && !meta.m_modifiers && p.curr_is_token_or_id(get_theory_tk())) {
+            auto& cmd = p.new_ast(get_theory_tk(), p.pos());
+            p.push_command(cmd.m_id);
+            cmd.m_children.push_back(mods.m_id);
             // `noncomputable theory`
             p.next();
             p.set_ignore_noncomputable();
@@ -509,11 +545,17 @@ static environment modifiers_cmd(parser & p, cmd_meta const & _meta) {
         }
     }
     if (p.curr_is_token(get_meta_tk())) {
+        if (!tk) tk = p.new_ast(get_meta_tk(), p.pos()).m_id;
+        mods.m_children.push_back(tk);
+        tk = 0;
         meta.m_modifiers.m_is_meta = true;
         p.next();
     }
 
     if (p.curr_is_token(get_mutual_tk())) {
+        if (!tk) tk = p.new_ast(get_mutual_tk(), p.pos()).m_id;
+        mods.m_children.push_back(tk);
+        tk = 0;
         meta.m_modifiers.m_is_mutual = true;
         p.next();
     }
@@ -525,6 +567,7 @@ static environment modifiers_cmd(parser & p, cmd_meta const & _meta) {
     if (p.curr_is_token(get_attribute_tk()) || p.curr_is_token("@[")) {
         throw parser_error("unexpected attributes declaration", p.pos());
     }
+    meta.m_modifiers_id = mods.m_id;
     p.parse_command(meta);
     return p.env();
 }
@@ -535,7 +578,9 @@ static environment attribute_cmd_core(parser & p, bool persistent, cmd_meta cons
     attributes.parse(p);
     // 'attribute [attr] definition ...'
     if (p.curr_is_command()) {
-        return modifiers_cmd(p, {attributes, meta.m_modifiers, meta.m_doc_string});
+        auto meta2 = meta;
+        meta2.m_attrs = attributes;
+        return modifiers_cmd(p, meta2);
     }
     do {
         auto pos = p.pos();

@@ -134,12 +134,14 @@ transition replace(transition const & t, std::function<expr(expr const &)> const
 class accepting {
     unsigned     m_prio;
     list<action> m_postponed; // exprs and scoped_expr actions
+    name         m_name;      // notation name
     expr         m_expr;      // resulting expression
 public:
-    accepting(unsigned prio, list<action> const & post, expr const & e):
-        m_prio(prio), m_postponed(post), m_expr(e) {}
+    accepting(unsigned prio, list<action> const & post, name const & n, expr const & e):
+        m_prio(prio), m_postponed(post), m_name(n), m_expr(e) {}
     unsigned get_prio() const { return m_prio; }
     list<action> const & get_postponed() const { return m_postponed; }
+    name const & get_name() const { return m_name; }
     expr const & get_expr() const { return m_expr; }
 };
 

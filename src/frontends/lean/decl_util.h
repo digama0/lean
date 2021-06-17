@@ -128,7 +128,7 @@ bool used_match_idx();
            {u_1 ... u_k}
 
     The universe parameters are automatically added to the parser scope. */
-bool parse_univ_params(parser & p, buffer<name> & lp_names);
+ast_id parse_univ_params(parser & p, buffer<name> & lp_names);
 
 /** \brief Parse a declaration header of the form
 
