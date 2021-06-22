@@ -59,7 +59,7 @@ environment section_cmd(parser & p) {
     ast_id id = 0; name n;
     if (p.curr_is_identifier())
         std::tie(id, n) = p.check_atomic_id_next("invalid section, atomic identifier expected");
-    p.cmd_ast_data().m_children.push_back(id);
+    p.cmd_ast_data().push(id);
     p.push_local_scope();
     return push_scope(p.env(), p.ios(), scope_kind::Section, n);
 }
@@ -110,7 +110,7 @@ environment execute_open(environment env, io_state const & ios, export_decl cons
 environment namespace_cmd(parser & p) {
     ast_id id = 0; name n;
     std::tie(id, n) = p.check_decl_id_next("invalid namespace declaration, identifier expected");
-    p.cmd_ast_data().m_children.push_back(id);
+    p.cmd_ast_data().push(id);
     p.push_local_scope();
     unsigned old_export_decls_sz = length(get_active_export_decls(p.env()));
     environment env = push_scope(p.env(), p.ios(), scope_kind::Namespace, n);
@@ -165,11 +165,11 @@ environment end_scoped_cmd(parser & p) {
         if (p.curr_is_identifier()) {
             ast_id id; name n;
             std::tie(id, n) = p.check_id_next("invalid end of scope, identifier expected");
-            p.cmd_ast_data().m_children.push_back(id);
+            p.cmd_ast_data().push(id);
             environment env = pop_scope(p.env(), p.ios(), n);
             return redeclare_aliases(env, p, level_decls, entries);
         } else {
-            p.cmd_ast_data().m_children.push_back(0);
+            p.cmd_ast_data().push(0);
             environment env = pop_scope(p.env(), p.ios());
             return redeclare_aliases(env, p, level_decls, entries);
         }
@@ -226,7 +226,7 @@ environment reduce_cmd(parser & p) {
         p.next();
         whnf = true;
     }
-    p.cmd_ast_data().m_children.push_back(id);
+    p.cmd_ast_data().push(id);
     expr e; level_param_names ls;
     std::tie(e, ls) = parse_local_expr(p, "_reduce");
     expr r;
@@ -250,16 +250,15 @@ environment exit_cmd(parser & p) {
 
 environment set_option_cmd(parser & p) {
     auto& data = p.cmd_ast_data();
-    auto id_kind = parse_option_name(p, "invalid set option, identifier (i.e., option name) expected");
+    auto id_kind = parse_option_name(p, data, "invalid set option, identifier (i.e., option name) expected");
     name id       = id_kind.first;
-    data.m_children.push_back(p.new_ast("option", p.pos(), id).m_id);
     option_kind k = id_kind.second;
     if (k == BoolOption) {
         if (p.curr_is_token_or_id(get_true_tk())) {
-            data.m_children.push_back(p.new_ast("bool", p.pos(), get_true_tk()).m_id);
+            data.push(p.new_ast("bool", p.pos(), get_true_tk()).m_id);
             p.set_option(id, true);
         } else if (p.curr_is_token_or_id(get_false_tk())) {
-            data.m_children.push_back(p.new_ast("bool", p.pos(), get_false_tk()).m_id);
+            data.push(p.new_ast("bool", p.pos(), get_false_tk()).m_id);
             p.set_option(id, false);
         } else
             throw parser_error("invalid Boolean option value, 'true' or 'false' expected", p.pos());
@@ -268,14 +267,17 @@ environment set_option_cmd(parser & p) {
         if (!p.curr_is_string())
             throw parser_error("invalid option value, given option is not a string", p.pos());
         auto s = p.get_str_val();
-        data.m_children.push_back(p.new_ast("string", p.pos(), s).m_id);
+        data.push(p.new_ast("string", p.pos(), s).m_id);
         p.set_option(id, s);
         p.next();
     } else if (k == DoubleOption) {
-        p.set_option(id, p.parse_double());
+        ast_id d_id; double d;
+        std::tie(d_id, d) = p.parse_double();
+        data.push(d_id);
+        p.set_option(id, d);
     } else if (k == UnsignedOption || k == IntOption) {
         auto n = p.parse_small_nat();
-        data.m_children.push_back(n.first);
+        data.push(n.first);
         p.set_option(id, n.second);
     } else {
         throw parser_error("invalid option value, 'true', 'false', string, integer or decimal value expected", p.pos());
@@ -296,12 +298,12 @@ environment open_export_cmd(parser & p, bool open) {
     auto& data = p.cmd_ast_data();
     while (true) {
         auto& group = p.new_ast("group", p.pos());
-        data.m_children.push_back(group.m_id);
+        data.push(group.m_id);
         auto pos   = p.pos();
         ast_id ns_id; name ns;
         std::tie(ns_id, ns) = p.check_id_next("invalid 'open/export' command, identifier expected",
             break_at_pos_exception::token_context::namespc);
-        group.m_children.push_back(ns_id);
+        group.push(ns_id);
         optional<name> real_ns = to_valid_namespace_name(env, ns);
         if (!real_ns)
             throw parser_error(sstream() << "invalid namespace name '" << ns << "'", pos);
@@ -311,7 +313,7 @@ environment open_export_cmd(parser & p, bool open) {
             p.next();
             std::tie(as_id, as) = p.check_id_next("invalid 'open/export' command, identifier expected");
         }
-        group.m_children.push_back(as_id);
+        group.push(as_id);
         buffer<name> exception_names;
         buffer<pair<name, name>> renames;
         bool found_explicit = false;
@@ -321,40 +323,40 @@ environment open_export_cmd(parser & p, bool open) {
             p.next();
             if (p.curr_is_token_or_id(get_renaming_tk())) {
                 auto& renames_ast = p.new_ast(get_renaming_tk(), p.pos());
-                group.m_children.push_back(renames_ast.m_id);
+                group.push(renames_ast.m_id);
                 p.next();
                 while (p.curr_is_identifier()) {
                     name from_id = p.get_name_val();
                     auto& rename = p.new_ast(get_arrow_tk(), p.pos());
-                    renames_ast.m_children.push_back(rename.m_id);
-                    rename.m_children.push_back(p.new_ast("ident", p.pos(), from_id).m_id);
+                    renames_ast.push(rename.m_id);
+                    rename.push(p.new_ast("ident", p.pos(), from_id).m_id);
                     p.next();
                     p.check_token_next(get_arrow_tk(), "invalid 'open/export' command renaming, '->' expected");
                     ast_id to_ast; name to_id;
                     std::tie(to_ast, to_id) = p.check_id_next("invalid 'open/export' command renaming, identifier expected");
-                    rename.m_children.push_back(to_ast);
+                    rename.push(to_ast);
                     check_identifier(p, env, ns, from_id);
                     exception_names.push_back(from_id);
                     renames.emplace_back(as+to_id, ns+from_id);
                 }
             } else if (p.curr_is_token_or_id(get_hiding_tk())) {
                 auto& hides = p.new_ast(get_hiding_tk(), p.pos());
-                group.m_children.push_back(hides.m_id);
+                group.push(hides.m_id);
                 p.next();
                 while (p.curr_is_identifier()) {
                     name id = p.get_name_val();
-                    hides.m_children.push_back(p.new_ast("ident", p.pos(), id).m_id);
+                    hides.push(p.new_ast("ident", p.pos(), id).m_id);
                     p.next();
                     check_identifier(p, env, ns, id);
                     exception_names.push_back(id);
                 }
             } else if (p.curr_is_identifier()) {
                 auto& explicit_ast = p.new_ast("explicit", p.pos());
-                group.m_children.push_back(explicit_ast.m_id);
+                group.push(explicit_ast.m_id);
                 found_explicit = true;
                 while (p.curr_is_identifier()) {
                     name id = p.get_name_val();
-                    explicit_ast.m_children.push_back(p.new_ast("ident", p.pos(), id).m_id);
+                    explicit_ast.push(p.new_ast("ident", p.pos(), id).m_id);
                     p.next();
                     check_identifier(p, env, ns, id);
                     renames.emplace_back(as+id, ns+id);
@@ -383,7 +385,6 @@ static environment export_cmd(parser & p) { return open_export_cmd(p, false); }
 
 static environment local_cmd(parser & p, cmd_meta const & meta) {
     if (p.curr_is_token_or_id(get_attribute_tk())) {
-        p.cmd_ast_data().m_children.push_back(p.new_ast(get_attribute_tk(), p.pos()).m_id);
         p.next();
         return local_attribute_cmd(p, meta);
     } else {
@@ -395,7 +396,7 @@ static environment help_cmd(parser & p) {
     auto rep = p.mk_message(p.cmd_pos(), INFORMATION);
     auto& data = p.cmd_ast_data();
     if (p.curr_is_token_or_id(get_options_tk())) {
-        data.m_children.push_back(p.new_ast(get_options_tk(), p.pos()).m_id);
+        data.push(p.new_ast(get_options_tk(), p.pos()).m_id);
         p.next();
         rep.set_end_pos(p.pos());
         auto decls = get_option_declarations();
@@ -404,7 +405,7 @@ static environment help_cmd(parser & p) {
                     << opt.get_description() << " (default: " << opt.get_default_value() << ")\n";
             });
     } else if (p.curr_is_token_or_id(get_commands_tk())) {
-        data.m_children.push_back(p.new_ast(get_commands_tk(), p.pos()).m_id);
+        data.push(p.new_ast(get_commands_tk(), p.pos()).m_id);
         p.next();
         buffer<name> ns;
         cmd_table const & cmds = p.cmds();
@@ -479,7 +480,7 @@ static environment compile_cmd(parser & p) {
     auto pos = p.pos();
     ast_id id = 0; name n;
     std::tie(id, n) = p.check_constant_next("invalid #compile command, constant expected");
-    p.cmd_ast_data().m_children.push_back(id);
+    p.cmd_ast_data().push(id);
     declaration d = p.env().get(n);
     if (!d.is_definition())
         throw parser_error("invalid #compile command, declaration is not a definition", pos);
@@ -587,17 +588,15 @@ struct declare_trace_modification : public modification {
 
 environment declare_trace_cmd(parser & p) {
     auto cls = p.check_id_next("invalid declare_trace command, identifier expected");
-    p.cmd_ast_data().m_children.push_back(cls.first);
+    p.cmd_ast_data().push(cls.first);
     return module::add_and_perform(p.env(), std::make_shared<declare_trace_modification>(cls.second));
 }
 
 environment add_key_equivalence_cmd(parser & p) {
-    ast_id id; name h1, h2;
-    auto& data = p.cmd_ast_data();
-    std::tie(id, h1) = p.check_constant_next("invalid add_key_equivalence command, constant expected");
-    data.m_children.push_back(id);
-    std::tie(id, h2) = p.check_constant_next("invalid add_key_equivalence command, constant expected");
-    data.m_children.push_back(id);
+    ast_id id1, id2; name h1, h2;
+    std::tie(id1, h1) = p.check_constant_next("invalid add_key_equivalence command, constant expected");
+    std::tie(id2, h2) = p.check_constant_next("invalid add_key_equivalence command, constant expected");
+    p.cmd_ast_data().push(id1).push(id2);
     return add_key_equivalence(p.env(), h1, h2);
 }
 
@@ -608,7 +607,7 @@ static environment run_command_cmd(parser & p) {
     options opts         = p.get_options();
     metavar_context mctx;
     expr tactic          = p.parse_expr();
-    p.cmd_ast_data().m_children.push_back(p.get_id(tactic));
+    p.cmd_ast_data().push(p.get_id(tactic));
     expr try_triv        = mk_app(mk_constant(get_tactic_try_name()), mk_constant(get_tactic_triv_name()));
     tactic               = mk_app(mk_constant(get_has_bind_and_then_name()), tactic, try_triv);
     tactic               = mk_typed_expr(mk_tactic_unit(), tactic);
@@ -630,7 +629,7 @@ environment hide_cmd(parser & p) {
     auto& data = p.cmd_ast_data();
     while (p.curr_is_identifier()) {
         name id = p.get_name_val();
-        data.m_children.push_back(p.new_ast("ident", p.pos(), id).m_id);
+        data.push(p.new_ast("ident", p.pos(), id).m_id);
         p.next();
         ids.push_back(id);
     }

@@ -156,7 +156,7 @@ class parse_table {
     struct cell;
     cell * m_ptr;
     explicit parse_table(cell * c);
-    parse_table add_core(unsigned num, transition const * ts, expr const & a, unsigned priority, bool overload, buffer<action> & postponed) const;
+    parse_table add_core(unsigned num, transition const * ts, name const & n, expr const & a, unsigned priority, bool overload, buffer<action> & postponed) const;
     void for_each(buffer<transition> & ts, std::function<void(unsigned, transition const *,
                                                               list<accepting> const &)> const & fn) const;
 public:
@@ -168,11 +168,15 @@ public:
     parse_table & operator=(parse_table&& n);
 
     bool is_nud() const;
-    parse_table add(unsigned num, transition const * ts, expr const & a, unsigned priority, bool overload) const;
-    parse_table add(std::initializer_list<transition> const & ts, expr const & a) const {
-        return add(ts.size(), ts.begin(), a, LEAN_DEFAULT_NOTATION_PRIORITY, true);
+    parse_table add(unsigned num, transition const * ts, name const & n, expr const & a, unsigned priority, bool overload) const;
+    parse_table add(std::initializer_list<transition> const & ts, name const & n, expr const & a) const {
+        return add(ts.size(), ts.begin(), n, a, LEAN_DEFAULT_NOTATION_PRIORITY, true);
     }
-    parse_table merge(parse_table const & s, bool overload) const;\
+    parse_table add(std::initializer_list<transition> const & ts, expr const & a) const {
+        lean_assert(ts.size() != 0);
+        return add(ts, ts.begin()->get_token(), a);
+    }
+    parse_table merge(parse_table const & s, bool overload) const;
     list<pair<transition, parse_table>> find(name const & tk) const;
     list<accepting> const & is_accepting() const;
     void for_each(std::function<void(unsigned, transition const *, list<accepting> const &)> const & fn) const;

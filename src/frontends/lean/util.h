@@ -8,6 +8,7 @@ Author: Leonardo de Moura
 #include "kernel/expr.h"
 #include "kernel/expr_sets.h"
 #include "kernel/type_checker.h"
+#include "library/abstract_parser.h"
 #include "library/util.h"
 #include "library/locals.h"
 #include "library/vm/vm.h"
@@ -99,7 +100,7 @@ char const * open_binder_string(binder_info const & bi, bool unicode);
 char const * close_binder_string(binder_info const & bi, bool unicode);
 
 /** \brief Parse option name */
-pair<name, option_kind> parse_option_name(parser & p, char const * error_msg);
+pair<name, option_kind> parse_option_name(parser & p, ast_data & parent, char const * error_msg);
 
 expr quote(unsigned u);
 expr quote(char const * str);
@@ -124,9 +125,9 @@ expr freeze_names(expr const & e);
 bool is_frozen_name(expr const & e);
 
 /* Field notation support */
-expr mk_field_notation(expr const & e, ast_id field_id, name const & field);
-expr mk_field_notation_compact(expr const & e, ast_id field_id, char const * field);
-expr mk_field_notation(expr const & e, ast_id field_id, unsigned fidx);
+expr mk_field_notation(expr const & e, name const & field);
+expr mk_field_notation_compact(expr const & e, char const * field);
+expr mk_field_notation(expr const & e, unsigned fidx);
 bool is_field_notation(expr const & e);
 bool is_anonymous_field_notation(expr const & e);
 name const & get_field_notation_field_name(expr const & e);

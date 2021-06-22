@@ -175,6 +175,7 @@ parser::parser(environment const & env, io_state const & ios,
 }
 
 parser::~parser() {
+    for (auto p : m_ast) delete p;
 }
 
 void parser::check_break_at_pos(break_at_pos_exception::token_context ctxt) {
@@ -276,19 +277,19 @@ tag parser::get_tag(expr e) {
 }
 
 ast_data & parser::new_ast(name type, pos_info start, name value) {
-    m_ast.emplace_back(m_next_ast_id++, start, type, value);
-    return m_ast.back();
+    m_ast.push_back(new ast_data{m_next_ast_id++, start, type, value});
+    return *m_ast.back();
 }
 
 void parser::set_ast_pexpr(ast_id id, expr const & e) {
-    m_ast[id].m_pexpr = e;
+    m_ast[id]->m_pexpr = e;
     auto t = get_tag(e);
     if (!m_tag_ast_table.contains(t))
         m_tag_ast_table.insert(t, id);
 }
 
 void parser::set_ast_expr(ast_id id, expr e) {
-    if (id) m_ast[id].m_expr.emplace(mk_pure_task(e));
+    if (id) m_ast[id]->m_expr.emplace(mk_pure_task(std::move(e)));
 }
 
 ast_id parser::get_id(expr const & e) const {
@@ -296,6 +297,13 @@ ast_id parser::get_id(expr const & e) const {
     if (t == nulltag) return 0;
     auto id = m_tag_ast_table.find(t);
     return id ? *id : 0;
+}
+
+ast_data & parser::new_modifiers(cmd_meta & meta) {
+    if (meta.m_modifiers_id) return get_ast(meta.m_modifiers_id);
+    auto& mods = new_ast("modifiers", pos());
+    meta.m_modifiers_id = mods.m_id;
+    return mods;
 }
 
 name parser::mk_anonymous_inst_name() {
@@ -494,10 +502,7 @@ expr parser::mk_app(std::initializer_list<expr> const & args, pos_info const & p
 static expr mk_app_ast(parser & p, expr left, expr right) {
     pos_info pos = p.pos_of(left);
     expr r = p.mk_app(left, right, pos);
-    auto& data = p.new_ast("app", pos);
-    data.m_children.push_back(p.get_id(left));
-    data.m_children.push_back(p.get_id(right));
-    p.set_ast_pexpr(data.m_id, r);
+    p.set_ast_pexpr(p.new_ast("app", pos).push(p.get_id(left)).push(p.get_id(right)).m_id, r);
     return r;
 }
 
@@ -769,7 +774,7 @@ pair<ast_id, level> parser::parse_max_imax(bool is_max) {
     buffer<level> lvls;
     while (curr_is_identifier() || curr_is_numeral() || curr_is_token(get_lparen_tk())) {
         auto r = parse_level(get_max_prec());
-        data.m_children.push_back(r.first);
+        data.push(r.first);
         lvls.push_back(r.second);
     }
     if (lvls.size() < 2) {
@@ -831,10 +836,8 @@ pair<ast_id, level> parser::parse_level_led(pair<ast_id, level> left) {
         if (curr_is_numeral()) {
             ast_id ak; unsigned k;
             std::tie(ak, k) = parse_small_nat();
-            auto& d = new_ast(get_add_tk(), ast_pos(left.first));
-            d.m_children.push_back(left.first);
-            d.m_children.push_back(ak);
-            return {d.m_id, lift(left.second, k)};
+            ast_id id = new_ast(get_add_tk(), ast_pos(left.first)).push(left.first).push(ak).m_id;
+            return {id, lift(left.second, k)};
         } else {
             return parser_error_or_level(
                     {"invalid level expression, right hand side of '+' "
@@ -983,9 +986,8 @@ void parser::parse_close_binder_info(optional<binder_info> const & bi) {
 /** \brief Parse <tt>ID ':' expr</tt>, where the expression represents the type of the identifier. */
 expr parser::parse_binder_core(binder_info const & bi, unsigned rbp) {
     auto p  = pos();
-    auto& ast = new_ast(name("binder").append_after(bi.hash()), p);
     auto& vars = new_ast("vars", p);
-    ast.m_children.push_back(vars.m_id);
+    auto& ast = new_ast(name("binder").append_after(bi.hash()), p).push(vars.m_id).push(0);
     pair<ast_id, name> id;
     if (curr_is_token(get_placeholder_tk())) {
         id = {new_ast(get_placeholder_tk(), p, "_x").m_id, "_x"};
@@ -993,15 +995,15 @@ expr parser::parse_binder_core(binder_info const & bi, unsigned rbp) {
     } else {
         id = check_atomic_id_next("invalid binder, atomic identifier expected");
     }
-    vars.m_children.push_back(id.first);
+    vars.push(id.first);
     expr type;
     if (curr_is_token(get_colon_tk())) {
         next();
         type = parse_expr(rbp);
-        ast.m_children.push_back(get_id(type));
+        ast.push(get_id(type));
     } else {
         type = save_pos(mk_expr_placeholder(), p);
-        ast.m_children.push_back(0);
+        ast.push(0);
     }
     expr r = save_pos(mk_local(id.second, type, bi), p);
     set_ast_pexpr(ast.m_id, r);
@@ -1050,8 +1052,7 @@ ast_id parser::parse_binder_collection(buffer<pair<pos_info, name>> const & name
     unsigned rbp  = p.first.get_action().rbp();
     next(); // consume tk
     expr S        = parse_expr(rbp);
-    auto& data = new_ast("collection", names[0].first, acc.get_name());
-    data.m_children.push_back(get_id(S));
+    ast_id id = new_ast("collection", names[0].first, acc.get_name()).push(get_id(S)).m_id;
     unsigned old_sz = r.size();
     /* Add (ID_1 ... ID_n : _) to r */
     for (auto p : names) {
@@ -1071,7 +1072,7 @@ ast_id parser::parse_binder_collection(buffer<pair<pos_info, name>> const & name
         r.push_back(local);
         i++;
     }
-    return data.m_id;
+    return id;
 }
 
 /**
@@ -1080,19 +1081,17 @@ ast_id parser::parse_binder_collection(buffer<pair<pos_info, name>> const & name
 */
 ast_id parser::parse_binder_block(buffer<expr> & r, binder_info const & bi, unsigned rbp, bool allow_default) {
     buffer<pair<pos_info, name>> names;
-    auto& ast = new_ast(name("binder").append_after(bi.hash()), pos());
-    cmd_ast_data().m_children.push_back(ast.m_id);
     auto& vars = new_ast("vars", pos());
-    ast.m_children.push_back(vars.m_id);
+    auto& ast = new_ast(name("binder").append_after(bi.hash()), pos()).push(vars.m_id).push(0);
     while (curr_is_identifier() || curr_is_token(get_placeholder_tk())) {
         auto p = pos();
         if (curr_is_identifier()) {
             ast_id id; name n;
             std::tie(id, n) = check_atomic_id_next("invalid binder, atomic identifier expected");
-            vars.m_children.push_back(id);
+            vars.push(id);
             names.emplace_back(p, n);
         } else {
-            vars.m_children.push_back(new_ast(get_placeholder_tk(), p, "_x").m_id);
+            vars.push(new_ast(get_placeholder_tk(), p).m_id);
             names.emplace_back(p, "_x");
             next();
         }
@@ -1105,33 +1104,33 @@ ast_id parser::parse_binder_block(buffer<expr> & r, binder_info const & bi, unsi
     if (curr_is_token(get_colon_tk())) {
         next();
         type = parse_expr(rbp);
-        ast.m_children.push_back(get_id(*type));
+        ast.push(get_id(*type));
         if (allow_default && curr_is_token(get_assign_tk())) {
             auto& ast1 = new_ast(get_assign_tk(), pos());
-            ast.m_children.push_back(ast1.m_id);
+            ast.push(ast1.m_id);
             next();
             expr val = parse_expr(rbp);
-            ast1.m_children.push_back(get_id(val));
+            ast1.push(get_id(val));
             type = mk_opt_param(*type, val);
         } else if (allow_default && curr_is_token(get_period_tk())) {
             auto& ast1 = new_ast(get_period_tk(), pos());
-            ast.m_children.push_back(ast1.m_id);
+            ast.push(ast1.m_id);
             ast_id id;
             std::tie(id, type) = parse_auto_param(*this, *type);
-            ast1.m_children.push_back(id);
+            ast1.push(id);
         }
     } else {
-        ast.m_children.push_back(0);
+        ast.push(0);
         if (allow_default && curr_is_token(get_assign_tk())) {
             auto& ast1 = new_ast(get_assign_tk(), pos());
-            ast.m_children.push_back(ast1.m_id);
+            ast.push(ast1.m_id);
             next();
             expr val = parse_expr(rbp);
-            ast1.m_children.push_back(get_id(val));
+            ast1.push(get_id(val));
             type = mk_opt_param(copy_tag(val, mk_expr_placeholder()), val);
         } else if (auto id = parse_binder_collection(names, bi, r)) {
-            ast.m_children.push_back(id);
-            return;
+            ast.push(id);
+            return ast.m_id;
         }
     }
     for (auto p : names) {
@@ -1140,25 +1139,24 @@ ast_id parser::parse_binder_block(buffer<expr> & r, binder_info const & bi, unsi
         add_local(local);
         r.push_back(local);
     }
+    return ast.m_id;
 }
 
 pair<ast_id, expr> parser::parse_inst_implicit_decl() {
     binder_info bi = mk_inst_implicit_binder_info();
     auto id_pos = pos();
     auto& ast = new_ast(name("binder").append_after(bi.hash()), id_pos);
-    cmd_ast_data().m_children.push_back(ast.m_id);
+    cmd_ast_data().push(ast.m_id);
     name id;
     expr type;
+    ast_id var = 0;
     if (curr_is_identifier()) {
         id = get_name_val();
         next();
         if (curr_is_token(get_colon_tk())) {
             next();
             type = parse_expr();
-            auto& vars = new_ast("vars", id_pos);
-            vars.m_children.push_back(new_ast("ident", id_pos, id).m_id);
-            ast.m_children.push_back(vars.m_id);
-            ast.m_children.push_back(get_id(type));
+            var = new_ast("vars", id_pos).push(new_ast("ident", id_pos, id).m_id).m_id;
         } else {
             expr left    = id_to_expr(id, new_ast("ident", id_pos, id));
             id           = mk_anonymous_inst_name();
@@ -1167,28 +1165,25 @@ pair<ast_id, expr> parser::parse_inst_implicit_decl() {
                 left = parse_led(left);
             }
             type = left;
-            ast.m_children.push_back(0);
-            ast.m_children.push_back(get_id(type));
         }
     } else {
         id   = mk_anonymous_inst_name();
         type = parse_expr();
-        ast.m_children.push_back(0);
-        ast.m_children.push_back(get_id(type));
     }
+    ast.push(var).push(0).push(get_id(type));
     expr local = save_pos(mk_local(id, type, bi), id_pos);
     add_local(local);
     return {ast.m_id, local};
 }
 
 
-void parser::parse_inst_implicit_decl(ast_data & data, buffer<expr> & r) {
+void parser::parse_inst_implicit_decl(ast_data * parent, buffer<expr> & r) {
     auto p = parse_inst_implicit_decl();
-    data.m_children.push_back(p.first);
+    if (parent) parent->push(p.first);
     r.push_back(p.second);
 }
 
-void parser::parse_binders_core(ast_data & data, buffer<expr> & r, parse_binders_config & cfg) {
+void parser::parse_binders_core(ast_data * parent, buffer<expr> & r, parse_binders_config & cfg) {
     bool first = true;
     while (true) {
         if (curr_is_identifier() || curr_is_token(get_placeholder_tk())) {
@@ -1199,7 +1194,8 @@ void parser::parse_binders_core(ast_data & data, buffer<expr> & r, parse_binders
             /* We only allow the default parameter value syntax for declarations with
                surrounded by () */
             bool new_allow_default = false;
-            data.m_children.push_back(parse_binder_block(r, binder_info(), cfg.m_rbp, new_allow_default));
+            ast_id id = parse_binder_block(r, binder_info(), cfg.m_rbp, new_allow_default);
+            if (parent) parent->push(id);
             cfg.m_last_block_delimited = false;
         } else {
             /* We only allow the default parameter value syntax for declarations with
@@ -1212,32 +1208,38 @@ void parser::parse_binders_core(ast_data & data, buffer<expr> & r, parse_binders
                     if (bi->is_implicit() && curr_is_token(get_rcurly_tk())) {
                         ast_id id = new_ast("{}", pos()).m_id;
                         next();
-                        *cfg.m_infer_kind = {id, implicit_infer_kind::RelaxedImplicit};
+                        *cfg.m_infer_kind = implicit_infer_kind::RelaxedImplicit;
+                        *cfg.m_infer_kind_id = id;
                         first             = false;
                         continue;
                     } else if (is_explicit(*bi) && curr_is_token(get_rparen_tk())) {
                         ast_id id = new_ast("()", pos()).m_id;
                         next();
-                        *cfg.m_infer_kind = {id, implicit_infer_kind::None};
+                        *cfg.m_infer_kind = implicit_infer_kind::None;
+                        *cfg.m_infer_kind_id = id;
                         first             = false;
                         continue;
                     } else if (bi->is_inst_implicit() && curr_is_token(get_rbracket_tk())) {
                         ast_id id = new_ast("{}", pos()).m_id;
                         next();
-                        *cfg.m_infer_kind = {id, implicit_infer_kind::Implicit};
+                        *cfg.m_infer_kind = implicit_infer_kind::Implicit;
+                        *cfg.m_infer_kind_id = id;
                         first             = false;
                         continue;
                     } else {
-                        *cfg.m_infer_kind = {0, implicit_infer_kind::RelaxedImplicit};
+                        *cfg.m_infer_kind = implicit_infer_kind::RelaxedImplicit;
+                        *cfg.m_infer_kind_id = 0;
                     }
                 }
                 unsigned rbp = 0;
                 cfg.m_last_block_delimited = true;
                 if (bi->is_inst_implicit()) {
-                    parse_inst_implicit_decl(data, r);
+                    parse_inst_implicit_decl(parent, r);
                 } else {
-                    if (cfg.m_simple_only || !parse_local_notation_decl(cfg.m_nentries))
-                        data.m_children.push_back(parse_binder_block(r, *bi, rbp, new_allow_default));
+                    if (cfg.m_simple_only || !parse_local_notation_decl(cfg.m_nentries)) {
+                        auto id = parse_binder_block(r, *bi, rbp, new_allow_default);
+                        if (parent) parent->push(id);
+                    }
                 }
                 parse_close_binder_info(bi);
             } else {
@@ -1248,11 +1250,11 @@ void parser::parse_binders_core(ast_data & data, buffer<expr> & r, parse_binders
     }
 }
 
-local_environment parser::parse_binders(ast_data & data, buffer<expr> & r, parse_binders_config & cfg) {
+local_environment parser::parse_binders(ast_data * parent, buffer<expr> & r, parse_binders_config & cfg) {
     flet<environment>      save1(m_env, m_env); // save environment
     flet<local_expr_decls> save2(m_local_decls, m_local_decls);
     unsigned old_sz = r.size();
-    parse_binders_core(data, r, cfg);
+    parse_binders_core(parent, r, cfg);
     if (!cfg.m_allow_empty && old_sz == r.size())
         throw_invalid_open_binder(pos());
     return local_environment(m_env);
@@ -1510,7 +1512,7 @@ expr parser::parse_notation(parse_table t, expr * left) {
             args.push_back(expr()); // placeholder
             kinds.push_back(a.kind());
             auto& data = new_ast("exprs", pos());
-            for (auto& e : r_args) data.m_children.push_back(get_id(e));
+            for (auto& e : r_args) data.push(get_id(e));
             ast_ids.push_back(data.m_id);
             nargs.push_back(to_list(r_args));
             break;
@@ -1520,12 +1522,13 @@ expr parser::parse_notation(parse_table t, expr * left) {
             ps.push_back(parse_binder(a.rbp()));
             ast_ids.push_back(get_id(ps.back()));
             break;
-        case notation::action_kind::Binders:
+        case notation::action_kind::Binders: {
             binder_pos = pos();
             auto& data = new_ast("binders", pos());
             ast_ids.push_back(data.m_id);
-            lenv = parse_binders(data, ps, a.rbp());
+            lenv = parse_binders(&data, ps, a.rbp());
             break;
+        }
         case notation::action_kind::ScopedExpr: {
             expr r   = parse_scoped_expr(ps, lenv, a.rbp());
             args.push_back(r);
@@ -1596,14 +1599,14 @@ expr parser::parse_notation(parse_table t, expr * left) {
     }
     ast_data* data;
     if (length(as) > 1) {
-        data = &new_ast("choice", p);
         auto& choices = new_ast("choices", p);
+        data = &new_ast("choice", p).push(choices.m_id);
         for (auto& a : as)
-            choices.m_children.push_back(new_ast("notation", p, a.get_name()).m_id);
+            choices.push(new_ast("notation", p, a.get_name()).m_id);
     } else {
         data = &new_ast("notation", p, head(as).get_name());
     }
-    for (auto id : ast_ids) data->m_children.push_back(id);
+    for (auto id : ast_ids) data->push(id);
     set_ast_pexpr(data->m_id, r);
     return r;
 }
@@ -1617,9 +1620,7 @@ expr parser::parse_inaccessible() {
     next();
     expr t = parse_expr(get_max_prec());
     t = save_pos(mk_inaccessible(t), p);
-    auto& data = new_ast("inacc", p);
-    data.m_children.push_back(get_id(t));
-    set_ast_pexpr(data.m_id, t);
+    set_ast_pexpr(new_ast(".(", p).push(get_id(t)).m_id, t);
     return t;
 }
 
@@ -2101,7 +2102,7 @@ optional<expr> parser::resolve_local(name const & id, pos_info const & p, list<n
         if (auto r = resolve_local(id.get_prefix(), p, extra_locals)) {
             auto field_pos = p;
             field_pos.second += id.get_prefix().utf8_size();
-            return some_expr(save_pos(mk_field_notation_compact(*r, 0, id.get_string()), field_pos));
+            return some_expr(save_pos(mk_field_notation_compact(*r, id.get_string()), field_pos));
         } else {
             return none_expr();
         }
@@ -2112,16 +2113,14 @@ optional<expr> parser::resolve_local(name const & id, pos_info const & p, list<n
 
 static expr mk_constant(parser & p, const name & id, const levels & ls, const ast_data & id_data, ast_id levels_id) {
     expr r = mk_constant(id, ls);
-    auto& c = p.new_ast("const", id_data.m_start);
-    c.m_children.push_back(id_data.m_id);
-    c.m_children.push_back(levels_id);
-    p.set_ast_pexpr(c.m_id, r);
+    ast_id c = p.new_ast("const", id_data.m_start).push(id_data.m_id).push(levels_id).m_id;
+    p.set_ast_pexpr(c, r);
     return r;
 }
 
 static expr mk_choice(parser & p, const buffer<expr> & es) {
     auto& c = p.new_ast("choice", p.expr_ast(es[0]).m_start);
-    for (auto& e : es) c.m_children.push_back(p.get_id(e));
+    for (auto& e : es) c.push(p.get_id(e));
     lean_assert(es.size() > 0);
     if (es.size() == 1)
         return es[0];
@@ -2132,28 +2131,26 @@ static expr mk_choice(parser & p, const buffer<expr> & es) {
 
 static expr mk_field_notation_ast(parser & p, const expr & s, const expr & r, ast_id field_id) {
     ast_id sid = p.get_id(s);
-    auto& field_ast = p.new_ast("field", p.ast_pos(sid));
-    field_ast.m_children.push_back(sid);
-    field_ast.m_children.push_back(field_id);
-    p.set_ast_pexpr(field_ast.m_id, r);
+    ast_id ast = p.new_ast("field", p.ast_pos(sid)).push(sid).push(field_id).m_id;
+    p.set_ast_pexpr(ast, r);
     return r;
 }
 
 static expr mk_field_notation_compact(parser & p, const expr & s, const pos_info & field_pos, const char * field) {
     ast_id field_id = p.new_ast("ident", field_pos, field).m_id;
-    expr r = p.save_pos(mk_field_notation_compact(s, field_id, field), field_pos);
+    expr r = p.save_pos(mk_field_notation_compact(s, field), field_pos);
     return mk_field_notation_ast(p, s, r, field_id);
 }
 
 static expr mk_field_notation(parser & p, const expr & s, const pos_info & field_pos, const name & field) {
     ast_id field_id = p.new_ast("ident", field_pos, field).m_id;
-    expr r = p.save_pos(mk_field_notation(s, field_id, field), field_pos);
+    expr r = p.save_pos(mk_field_notation(s, field), field_pos);
     return mk_field_notation_ast(p, s, r, field_id);
 }
 
-static expr mk_field_notation(parser & p, const expr & s, const pos_info & field_pos, const pair<ast_id, unsigned> & fidx) {
-    expr r = p.save_pos(mk_field_notation(s, fidx.first, fidx.second), field_pos);
-    return mk_field_notation_ast(p, s, r, fidx.first);
+static expr mk_field_notation(parser & p, const expr & s, const pos_info & field_pos, ast_id field_id, unsigned fidx) {
+    expr r = p.save_pos(mk_field_notation(s, fidx), field_pos);
+    return mk_field_notation_ast(p, s, r, field_id);
 }
 
 expr parser::id_to_expr(name const & id, ast_data & id_data,
@@ -2169,7 +2166,7 @@ expr parser::id_to_expr(name const & id, ast_data & id_data,
             auto _ = backtracking_scope();
             try {
                 auto l = parse_level();
-                ast.m_children.push_back(l.first);
+                ast.push(l.first);
                 lvl_buffer.push_back(l.second);
             } catch (backtracking_exception) {}
             if (!consumed_input()) break;
@@ -2244,10 +2241,9 @@ expr parser::id_to_expr(name const & id, ast_data & id_data,
             new_as.push_back(copy_with_new_pos(mk_constant(e, ls), p));
         }
         r = save_pos(mk_choice(*this, new_as), p);
-        auto& c = new_ast(new_as.size() == 1 ? "const" : "choice_const", id_data.m_start);
-        c.m_children.push_back(id_data.m_id);
-        c.m_children.push_back(explicit_levels);
-        set_ast_pexpr(c.m_id, *r);
+        ast_id c = new_ast(new_as.size() == 1 ? "const" : "choice_const", id_data.m_start)
+            .push(id_data.m_id).push(explicit_levels).m_id;
+        set_ast_pexpr(c, *r);
     }
     if (!r) {
         if (m_id_behavior == id_behavior::AssumeLocalIfUndef) {
@@ -2493,9 +2489,9 @@ expr parser::parse_led(expr left) {
             return r;
         }
         case token_kind::FieldNum: {
-            pair<ast_id, unsigned> pr;
-            pr.first = new_ast("nat", pos(), std::to_string(pr.second = get_small_nat())).m_id;
-            expr r = mk_field_notation(*this, left, pos(), pr);
+            unsigned fidx = get_small_nat();
+            ast_id id = new_ast("nat", pos(), std::to_string(fidx)).m_id;
+            expr r = mk_field_notation(*this, left, pos(), id, fidx);
             next();
             return r;
         }
@@ -2557,31 +2553,31 @@ expr parser::parse_expr(unsigned rbp) {
     return parse_led_loop(left, rbp);
 }
 
-pair<optional<name>, expr> parser::parse_id_tk_expr(name const & tk, unsigned rbp) {
+std::tuple<ast_id, optional<name>, expr> parser::parse_id_tk_expr(name const & tk, unsigned rbp) {
     if (curr_is_identifier()) {
         name id = get_name_val();
         auto& id_data = new_ast("ident", pos(), id);
         next();
         if (curr_is_token(tk)) {
             next();
-            return mk_pair(optional<name>(id), parse_expr(rbp));
+            return {id_data.m_id, optional<name>(id), parse_expr(rbp)};
         } else {
             expr left = id_to_expr(id, id_data);
             while (rbp < curr_lbp()) {
                 left = parse_led(left);
             }
-            return mk_pair(optional<name>(), left);
+            return {0, {}, left};
         }
     } else {
-        return mk_pair(optional<name>(), parse_expr(rbp));
+        return {0, {}, parse_expr(rbp)};
     }
 }
 
-pair<optional<name>, expr> parser::parse_qualified_expr(unsigned rbp) {
+std::tuple<ast_id, optional<name>, expr> parser::parse_qualified_expr(unsigned rbp) {
     return parse_id_tk_expr(get_colon_tk(), rbp);
 }
 
-pair<optional<name>, expr> parser::parse_optional_assignment(unsigned rbp) {
+std::tuple<ast_id, optional<name>, expr> parser::parse_optional_assignment(unsigned rbp) {
     return parse_id_tk_expr(get_assign_tk(), rbp);
 }
 
@@ -2653,11 +2649,11 @@ void parser::parse_command(cmd_meta const & meta) {
     }
 }
 
-std::string parser::parse_doc_block() {
+pair<ast_id, std::string> parser::parse_doc_block() {
     auto val = m_scanner.get_str_val();
-    m_last_cmd_doc_id = new_ast("doc", m_scanner.get_pos_info(), val).m_id;
+    auto id = new_ast("doc", m_scanner.get_pos_info(), val).m_id;
     next();
-    return val;
+    return {id, val};
 }
 
 void parser::parse_mod_doc_block() {
@@ -2721,7 +2717,7 @@ bool parser::parse_imports(unsigned & fingerprint, std::vector<module_name> & im
                     fingerprint = hash(fingerprint, h);
                 }
                 auto& ast_mod = new_ast("module", p);
-                import_cmd.m_children.push_back(ast_mod.m_id);
+                import_cmd.push(ast_mod.m_id);
                 if (k_init) {
                     ast_mod.m_value = f.append_after(k);
                     module_name m(f, k);
@@ -2853,9 +2849,13 @@ bool parser::parse_command_like() {
             parse_command(cmd_meta());
             updt_options();
             break;
-        case token_kind::DocBlock:
-            parse_command(cmd_meta({}, {}, some(parse_doc_block())));
+        case token_kind::DocBlock: {
+            auto r = parse_doc_block();
+            cmd_meta meta({}, {}, some(std::move(r.second)));
+            new_modifiers(meta).push(r.first);
+            parse_command(meta);
             break;
+        }
         case token_kind::ModDocBlock:
             parse_mod_doc_block();
             break;
